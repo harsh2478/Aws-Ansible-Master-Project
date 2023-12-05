@@ -1,0 +1,124 @@
+- name: "Ansible test"
+  hosts: "localhost"
+  connection: local
+  gather_facts: false
+  become: yes
+  vars:
+    access_key: "AKIA4ZY4HU27T6FOTBPO"
+    secret_key: "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"
+    vars_files:
+      - "/root/ansible_playbook/aws_var.yml"
+  tasks:
+   
+    - name: "creating key pair in aws"
+      amazon.aws.ec2_key:
+        name: "ansible_key_2"
+        key_material: "{{ lookup('file', '/root/.ssh/ansible_key_2.pub') }}"
+        region: "ap-south-1"
+        state: present
+        aws_secret_key: "{{secret_key}}"
+        aws_access_key: "{{access_key}}"
+
+    - name: "Create security group"
+      amazon.aws.ec2_security_group:
+        name: "sg_ansible_testing"
+        description: "Security group"
+        region: "ap-south-1"
+        aws_access_key: "{{access_key}}"  
+        aws_secret_key: "{{secret_key}}"  
+        rules:                                
+          - proto: tcp
+            ports:
+              - 22
+              - 80
+            cidr_ip: 0.0.0.0/0
+            rule_desc: "allow everyone on http and ssh port"
+
+
+    - name: "launching aws ec2 instance"
+      amazon.aws.ec2_instance:
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "ap-south-1"
+        key_name: "ansible_key_2"
+        image_id: "ami-0645cf88151eb2007"
+        instance_type: "t2.micro"
+        tags:
+           environment: "testing"
+             #vpc_subnet_id: default
+        security_group: "sg_ansible_testing"
+        network:
+          assign_public_ip: true
+        count: 1
+        wait_timeout: 300
+      register: info
+      ignore_errors: true
+
+    - name: "info of instances"
+      debug:
+        var: info.instances[0].public_ip_address
+      
+    - pause:
+        seconds: 5
+
+    - name: "add instance to host"
+      add_host:
+        name: "{{info.instances[0].public_ip_address}}"
+        ansible_user: "ec2-user"
+        groups: "launched"
+          
+
+    - name: "wait for ssh to be available"
+      wait_for:
+        host: "{{ info.instances[0].public_ip_address }}"
+        port: 22
+        timeout: 150
+      delegate_to: localhost
+          
+    - name: "Retry gathering facts after waiting for ssh"
+      setup:
+      delegate_to: "{{info.instances[0].public_ip_address}}"
+
+
+    - pause:
+        seconds: 6
+
+
+- name: "Configure Launched Instances"
+  hosts: all
+  become: yes
+  become_user: "ec2-user"
+  gather_facts: true
+  tasks:
+
+    - name: "installing httpd"
+      package:
+        name: "httpd"
+        state: present
+      become: yes
+      become_user: root
+      register: web
+
+    - name: "info about installation"
+      debug:
+        var: web
+
+    - name: "Deploying web pages"
+      copy:
+        src: "/root/index.html"
+        dest: "/var/www/html/harsh.html"
+      register: deploy
+      become: yes
+      become_user: root
+
+    - name: "info about deploying"
+      debug:
+        var: deploy
+
+    - name: "starting services"
+      service:
+        name: "httpd"
+        state: started
+      become: yes
+      become_user: root
+
