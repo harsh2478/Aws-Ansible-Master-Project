@@ -4,8 +4,8 @@
   gather_facts: false
   become: yes
   vars:
-    access_key: "AKIA4ZY4HU27T6FOTBPO"
-    secret_key: "oQ+Lozs6p6Og3mhpSFgrwf0pIKG52t+9GyKRP3BX"
+    access_key: "</your-access-key/>"
+    secret_key: "</your-secret-key/>"
     vars_files:
       - "/root/ansible_playbook/aws_var.yml"
   tasks:
@@ -54,14 +54,14 @@
       register: info
       ignore_errors: true
 
-    - name: "info of instances"
+    - name: "Info of Instances"
       debug:
         var: info.instances[0].public_ip_address
       
     - pause:
         seconds: 5
 
-    - name: "add instance to host"
+    - name: "Adding host to Inventory"
       add_host:
         name: "{{info.instances[0].public_ip_address}}"
         ansible_user: "ec2-user"
@@ -84,14 +84,14 @@
         seconds: 6
 
 
-- name: "Configure Launched Instances"
+- name: "Configure Web Server in Launched Instances"
   hosts: all
   become: yes
   become_user: "ec2-user"
   gather_facts: true
   tasks:
 
-    - name: "installing httpd"
+    - name: "Installing httpd for RHEL"
       package:
         name: "httpd"
         state: present
@@ -99,23 +99,24 @@
       become_user: root
       register: web
 
-    - name: "info about installation"
+    - name: "Info about Installation"
       debug:
         var: web
 
-    - name: "Deploying web pages"
-      copy:
-        src: "/root/index.html"
+    - name: "Deploying Web Pages"
+      get_url:
+        url: "https://raw.githubusercontent.com/harsh2478/basic-html-for-testing/main/basic-html-template"
         dest: "/var/www/html/harsh.html"
-      register: deploy
       become: yes
       become_user: root
+      register: deploy
 
-    - name: "info about deploying"
+
+    - name: "Info about deploying"
       debug:
         var: deploy
 
-    - name: "starting services"
+    - name: "Starting services"
       service:
         name: "httpd"
         state: started
